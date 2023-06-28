@@ -117,7 +117,7 @@ class Sentence():
         Returns the set of all cells in self.cells known to be safe.
         """
         if self.count == 0:
-            return self.mines
+            return self.cells
 
 
     def mark_mine(self, cell):
@@ -178,6 +178,92 @@ class MinesweeperAI():
         for sentence in self.knowledge:
             sentence.mark_safe(cell)
 
+    def get_around(self, cell):
+        i, j = cell
+        around = []
+
+        i_min, i_max, j_min, j_max = 0, 0, 0, 0
+
+        # For i's
+        if i == 0:
+            i_min = 0
+            i_max = i + 2
+        elif i == 7:
+            i_min = i - 1
+            i_max = 7 + 1
+        else:
+            i_min = i - 1
+            i_max = i + 2
+
+        # For j's
+        if j == 0:
+            j_min = 0
+            j_max = j + 2
+        elif j == 7:
+            j_min = j - 1
+            j_max = 7 + 1
+        else:
+            j_min = j - 1
+            j_max = j + 2
+
+        # Calculate all the cells surrounding
+        for cell_i in range(i_min, i_max):
+            for cell_j in range(j_min, j_max):
+                around.append((cell_i, cell_j))
+
+        return around
+    
+    # Check sentence if is there are mine or safe cells
+    def check_sentence(self, s):
+        if s.known_mines():
+            cells = s.known_mines()
+            for c in cells.copy():
+                self.mark_mine(c)
+        if s.known_safes():
+            cells = s.known_safes()
+            for c in cells.copy():
+                self.mark_safe(c)
+ 
+    # Check if similar sentence already in the knowlege base ( avoid double sentences )
+    def check_knowlege(self, sen):
+        for k in self.knowledge:
+            if sen.cells == k.cells and sen.count == k.count:
+                return False
+            
+        return True
+    
+    # Check inference (recursion 2 times)
+    def check_infer(self, sen, n):
+        if n == 0:
+            return True
+        else:
+            # For every sentence in knowlege
+            for i in range(len(self.knowledge)):
+                s1 = self.knowledge[i]
+                s2 = sen # Current sentence
+                
+                # If is subset of other and is not empty
+                if s1.cells.issubset(s2.cells) and len(s2.cells.difference(s1.cells)) > 0:
+                    new_cells = s2.cells.difference(s1.cells)
+                    new_count = s2.count - s1.count
+                    new_sentence = Sentence(new_cells, new_count) # Create new Sentence
+                    self.check_sentence(new_sentence)
+                    if self.check_knowlege(new_sentence):
+                        self.knowledge.insert(0, new_sentence) # Insert in the beggining of the list
+                        self.check_infer(new_sentence, n - 1)
+
+                if s2.cells.issubset(s1.cells) and len(s1.cells.difference(s2.cells)) > 0:
+                    new_cells = s1.cells.difference(s2.cells)
+                    new_count = s1.count - s2.count
+                    new_sentence = Sentence(new_cells, new_count)
+                    self.check_sentence(new_sentence)
+                    if self.check_knowlege(new_sentence):
+                        self.knowledge.insert(0, new_sentence)
+                        self.check_infer(new_sentence, n - 1)
+            
+        return self.check_infer(sen, 0)
+
+
     def add_knowledge(self, cell, count):
         """
         Called when the Minesweeper board tells us, for a given
@@ -189,16 +275,39 @@ class MinesweeperAI():
             3) add a new sentence to the AI's knowledge base
                based on the value of `cell` and `count`
             4) mark any additional cells as safe or as mines
-               if it can be concluded based on the AI's knowledge base
+               if it can be conclu
+               ded based on the AI's knowledge base
             5) add any new sentences to the AI's knowledge base
                if they can be inferred from existing knowledge
         """
         self.moves_made.add(cell) # 1
 
-        self.safes.add(cell) # 2
+        self.mark_safe(cell)
 
-        
-        raise NotImplementedError
+        # 3
+        # Create a sentence instance, with surrounding cells and count
+        sentence = Sentence(self.get_around(cell), count)
+
+        sentence.mark_safe(cell)
+
+        # Check if cells in new sentence already in safes or mines
+        for c in sentence.cells.copy():
+            for m in self.mines.copy():
+                if c == m:
+                    sentence.mark_mine(c)
+            for s in self.safes.copy():
+                if c == s:
+                    sentence.mark_safe(c)
+
+        self.check_sentence(sentence)
+
+        # Add sentence to self.knowledge
+        self.knowledge.append(sentence)
+
+        # Check if infernce possible, 2 times if first time success)
+        self.check_infer(sentence, 2)
+
+            
 
     def make_safe_move(self):
         """
@@ -209,7 +318,20 @@ class MinesweeperAI():
         This function may use the knowledge in self.mines, self.safes
         and self.moves_made, but should not modify any of those values.
         """
-        raise NotImplementedError
+        moves = []
+        for i in range(0, 8):
+            for j in range(0, 8):
+                moves.append((i,j))
+
+        for m in self.moves_made:
+            if m in moves:
+                moves.remove(m)
+
+        for m in self.safes:
+            if m in moves:
+                return m
+            
+
 
     def make_random_move(self):
         """
@@ -218,4 +340,20 @@ class MinesweeperAI():
             1) have not already been chosen, and
             2) are not known to be mines
         """
-        raise NotImplementedError
+        moves = []
+        for i in range(0, 8):
+            for j in range(0, 8):
+                moves.append((i,j))
+
+        for m in self.moves_made:
+            if m in moves:
+                moves.remove(m)
+
+        for m in self.mines:
+            if m in moves:
+                moves.remove(m)
+
+        if moves:
+            return moves[0]
+        
+
